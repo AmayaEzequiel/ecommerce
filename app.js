@@ -3,9 +3,10 @@ const mysql = require('mysql2');
 require('dotenv').config();
 
 const app = express();
+// Render asigna automáticamente un puerto, por eso usamos process.env.PORT
 const port = process.env.PORT || 10000;
 
-// Configuración de la conexión a Aiven
+// 1. Configuración de la conexión a Aiven (MySQL)
 const connection = mysql.createConnection({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -13,22 +14,36 @@ const connection = mysql.createConnection({
   port: process.env.DB_PORT,
   database: process.env.DB_NAME,
   ssl: {
-    ca: Buffer.from(process.env.DB_SSL_CA_BASE64, 'base64').toString('ascii')
+    // Aquí decodificamos el certificado que pegaste en Render
+    ca: Buffer.from(process.env.DB_SSL_CA_BASE64, 'base64').toString('utf-8')
   }
 });
 
+// 2. Intentar la conexión
 connection.connect((err) => {
   if (err) {
-    console.error('Error conectando a Aiven:', err);
+    console.error('❌ Error de conexión a Aiven:', err.message);
     return;
   }
-  console.log('Conectado exitosamente a la base de datos de Aiven');
+  console.log('✅ Conectado exitosamente a la base de datos de Aiven');
 });
 
+// 3. Ruta principal (El "Hello World" que te pide la tarea)
 app.get('/', (req, res) => {
-  res.send('¡Servidor funcionando y conectado a la infraestructura!');
+  res.send(`
+    <html>
+      <head><title>Entrega 1 - Infraestructura</title></head>
+      <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+        <h1>¡Hello World! 🚀</h1>
+        <p>Servidor funcionando y conectado a la infraestructura correctamente.</p>
+        <p><strong>Entorno:</strong> GitHub Codespaces + Aiven MySQL + Render</p>
+        <div style="color: green; font-weight: bold;">✔ Despliegue Exitoso</div>
+      </body>
+    </html>
+  `);
 });
 
+// 4. Encender el servidor
 app.listen(port, () => {
-  console.log(`App escuchando en el puerto ${port}`);
+  console.log(`🚀 Servidor listo en http://localhost:${port}`);
 });
