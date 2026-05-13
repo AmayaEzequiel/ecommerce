@@ -1,2 +1,13 @@
-node_modules/
+# Variables de entorno (CONTRASEÑAS)
 .env
+
+# Certificados SSL
+ca.pem
+*.pem
+
+# Dependencias
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
