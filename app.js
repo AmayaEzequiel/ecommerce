@@ -1,164 +1,91 @@
-const express = require('express');
-const mysql = require('mysql2');
+// app.js
 require('dotenv').config();
+const express      = require('express');
+const path         = require('path');
+const session      = require('express-session');
+const cookieParser = require('cookie-parser');
+const ejsLayouts   = require('express-ejs-layouts');
+const sequelize    = require('./config/database');
 
-const app = express();
+const productRoutes  = require('./routes/products');
+const cartRoutes     = require('./routes/cart');
+const checkoutRoutes = require('./routes/checkout');
 
-// Middleware para parsear JSON
-app.use(express.json());
-
-// NOMBRE DEL ALUMNO (CAMBIA POR TU NOMBRE REAL)
+const app  = express();
+const port = process.env.PORT || 3000;
 const NOMBRE_ALUMNO = "Ezequiel Amaya";
 
-// Render asigna automáticamente un puerto
-const port = process.env.PORT || 10000;
 
-// 1. Configuración del POOL de conexiones (mejor que connection simple)
-const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
-  ssl: {
-    ca: Buffer.from(process.env.DB_SSL_CA_BASE64, 'base64').toString('utf-8')
-  },
-  waitForConnections: true,
-  connectionLimit: 10,      // Máximo 10 conexiones simultáneas
-  queueLimit: 0,            // Cola ilimitada
-  enableKeepAlive: true,    // Mantener conexiones vivas
-  keepAliveInitialDelay: 0
-});
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+app.set('layout', 'layout');
+app.use(ejsLayouts);
 
-// 2. Verificar conexión al iniciar (con mejor manejo de errores)
-async function testDatabaseConnection() {
-  try {
-    const connection = await pool.promise().getConnection();
-    console.log('✅ Pool conectado exitosamente a Aiven MySQL');
-    
-    // Verificar que podemos hacer queries
-    const [rows] = await connection.query('SELECT 1 + 1 AS solution');
-    console.log('✅ Query de prueba exitosa:', rows[0].solution);
-    
-    connection.release();
-    return true;
-  } catch (err) {
-    console.error('❌ Error de conexión a Aiven MySQL:', {
-      message: err.message,
-      code: err.code,
-      errno: err.errno,
-      sqlState: err.sqlState,
-      timestamp: new Date().toISOString()
-    });
-    return false;
+// Middlewares
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(cookieParser());
+app.use(session({
+  secret:            process.env.SESSION_SECRET || 'dev-secret',
+  resave:            false,
+  saveUninitialized: false,
+  cookie: { maxAge: 3600000 }
+}));
+
+// Middleware: carrito vacío en sesión si no existe
+app.use((req, res, next) => {
+  if (!req.session.cart) {
+    req.session.cart = { items: [], totalQty: 0, totalPrice: 0 };
   }
-}
-
-// 3. Middleware de manejo de errores global
-app.use((err, req, res, next) => {
-  console.error('🔥 Error no manejado:', {
-    error: err.message,
-    stack: err.stack,
-    url: req.url,
-    method: req.method,
-    timestamp: new Date().toISOString()
-  });
-  
-  res.status(500).json({
-    error: 'Error interno del servidor',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Algo salió mal',
-    timestamp: new Date().toISOString()
-  });
+  res.locals.cartItemCount = req.session.cart.totalQty || 0;
+  next();
 });
 
-// 4. Ruta principal (CUMPLE CON LA GUÍA + MEJORAS)
-app.get('/', async (req, res, next) => {
-  try {
-    // Verificar conexión a BD
-    const connection = await pool.promise().getConnection();
-    await connection.ping();
-    connection.release();
-    
-    res.send(`
-      <html>
-        <head><title>Entrega 1 - Infraestructura</title></head>
-        <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-          <h1>Hello World - ${NOMBRE_ALUMNO}</h1>
-          <p>La aplicacion funciona en Render.</p>
-          <p>Puerto: ${port} | Entorno: ${process.env.NODE_ENV || 'development'}</p>
-          <p><strong>Stack:</strong> GitHub Codespaces + Aiven MySQL + Render</p>
-          <div style="color: green; font-weight: bold;">✔ Despliegue Exitoso</div>
-          <div style="color: green;">✔ Base de datos conectada</div>
-        </body>
-      </html>
-    `);
-  } catch (error) {
-    console.error('Error en ruta principal:', error.message);
-    res.send(`
-      <html>
-        <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-          <h1>Hello World - ${NOMBRE_ALUMNO}</h1>
-          <p>La aplicacion funciona en Render.</p>
-          <p>Puerto: ${port} | Entorno: ${process.env.NODE_ENV || 'development'}</p>
-          <p style="color: red;">⚠️ Error de conexion a base de datos</p>
-        </body>
-      </html>
-    `);
-  }
+// Ruta principal (Hello World)
+app.get('/', (req, res) => {
+  res.send(`
+    <html>
+      <head><title>Entrega 1 - Infraestructura</title></head>
+      <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+        <h1>Hello World - ${NOMBRE_ALUMNO}</h1>
+        <p>La aplicacion funciona en Render.</p>
+        <p>Puerto: ${port} | Entorno: ${process.env.NODE_ENV || 'development'}</p>
+        <p><strong>Stack:</strong> GitHub Codespaces + Aiven MySQL + Render</p>
+        <div style="color: green; font-weight: bold;">✔ Despliegue Exitoso</div>
+      </body>
+    </html>
+  `);
 });
 
-// 5. Ruta de health check para monitoreo
-app.get('/health', async (req, res) => {
-  try {
-    const connection = await pool.promise().getConnection();
-    await connection.ping();
-    connection.release();
-    
-    res.json({
-      status: 'healthy',
-      database: 'connected',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime()
+// Rutas
+app.use('/cart', cartRoutes);
+app.use('/checkout', checkoutRoutes);
+app.use('/', productRoutes);  
+
+// 404 (versión sin EJS)
+app.use('/*path', (req, res) => {
+  res.status(404).send(`
+    <html>
+      <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+        <h2>404 - Página no encontrada</h2>
+        <p>La ruta que buscas no existe.</p>
+        <a href="/">Volver al inicio</a>
+      </body>
+    </html>
+  `);
+});
+
+// Sincronizar BD e iniciar servidor
+sequelize.sync()
+  .then(() => {
+    console.log('✅ Base de datos sincronizada');
+    app.listen(port, () => {
+      console.log(`🚀 Servidor en http://localhost:${port}`);
+      console.log(`👤 Alumno: ${NOMBRE_ALUMNO}`);
     });
-  } catch (error) {
-    res.status(503).json({
-      status: 'unhealthy',
-      database: 'disconnected',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// 6. Manejo de rutas no encontradas (404)
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Ruta no encontrada',
-    path: req.originalUrl,
-    timestamp: new Date().toISOString()
+  })
+  .catch(err => {
+    console.error('❌ Error al sincronizar BD:', err.message);
+    process.exit(1);
   });
-});
-
-// 7. Capturar errores no manejados del proceso
-process.on('uncaughtException', (err) => {
-  console.error('💥 Error no capturado:', err);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('⚠️ Promesa rechazada no manejada:', reason);
-});
-
-// 8. Iniciar servidor
-async function startServer() {
-  // Probar conexion a BD
-  const dbConnected = await testDatabaseConnection();
-  
-  app.listen(port, () => {
-    console.log(`🚀 Servidor listo en puerto ${port}`);
-    console.log(`👤 Alumno: ${NOMBRE_ALUMNO}`);
-    console.log(`📍 Entorno: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🗄️ Base de datos: ${dbConnected ? 'Conectada ✅' : 'No conectada ❌'}`);
-  });
-}
-
-startServer();
