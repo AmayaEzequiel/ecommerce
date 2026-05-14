@@ -61,7 +61,7 @@ app.get('/', (req, res) => {
 // Rutas
 app.use('/cart', cartRoutes);
 app.use('/checkout', checkoutRoutes);
-app.use('/', productRoutes);  
+app.use('/products', productRoutes);
 
 // 404 (versión sin EJS)
 app.use('/*path', (req, res) => {
